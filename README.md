@@ -24,6 +24,8 @@ This library provides helpers for timespans manipulation using pandas objects. L
         labels=['RED', 'BLUE']
     )
 
+![Alt text](./images/fig01.png)
+
 ### Describe the timespan
 
 This following method gives a quick overview of your timespans:
