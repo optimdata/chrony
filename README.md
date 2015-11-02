@@ -50,6 +50,7 @@ This library provides helpers for timespans manipulation using pandas objects. L
         labels=df['job'].values
     )
 
+![Alt text](./images/fig02.png)
 
 ### Describe the timespan
 
