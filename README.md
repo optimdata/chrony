@@ -26,6 +26,31 @@ This library provides helpers for timespans manipulation using pandas objects. L
 
 ![Alt text](./images/fig01.png)
 
+
+    df = pd.DataFrame({})
+    df0 = pd.DataFrame({
+        'ts_beg': pd.date_range('2015-10-02', freq='2h', periods=12),
+        'ts_end': pd.date_range('2015-10-02T02:00:00', freq='2h', periods=12),
+        'job': ['A.%.2d' % i for i in range(12)],
+        'category': 'A'
+    })
+    df1 = pandas.DataFrame({
+        'ts_beg': pd.date_range('2015-10-02T01:00:00', freq='2h', periods=12),
+        'ts_end': pd.date_range('2015-10-02T03:00:00', freq='2h', periods=12),
+        'job': ['B.%.2d' % i for i in range(12)],
+        'category': 'B'
+    })
+    df = df.append(df0)
+    df = df.append(df1)
+
+    plot_events(
+        categories=df['category'].values,
+        xmin=df['ts_beg'].values,
+        xmax=df['ts_end'].values,
+        labels=df['job'].values
+    )
+
+
 ### Describe the timespan
 
 This following method gives a quick overview of your timespans:
