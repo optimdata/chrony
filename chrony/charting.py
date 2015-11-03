@@ -2,7 +2,7 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import matplotlib as plt
+import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -19,7 +19,8 @@ def plot_events(categories, xmin, xmax, labels=None, xlim=None, linewidth=10):
     plt.figure(figsize=(20, 5))
     plt.xlim(xlim)
     plt.ylim(0, len(index) + 1)
-    plt.yticks(index.values(), index.keys())
+    plt.xticks(fontsize=18)
+    plt.yticks(list(index.values()), list(index.keys()), fontsize=18)
     for i in range(len(categories)):
         if labels is not None:
             plt.text(
