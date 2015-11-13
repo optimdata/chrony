@@ -8,7 +8,7 @@ import pandas as pd
 import pytz
 import unittest
 
-from .core import compute_category_index
+from .core import compute_category_index, weighted_interpolate
 from .exceptions import BadLengthsError, BegPosteriorToEndError, OverlapError, NotSortedError, HasTimezoneError, IntegrityError
 from .timespans import audit_timespan, describe_timespan, to_stamps, to_spans, compute_segments
 
@@ -120,8 +120,14 @@ class TimespanCase(unittest.TestCase):
         )
 
 
-class ChartingCase(unittest.TestCase):
+class CoreCase(unittest.TestCase):
     def test_all(self):
         self.assertTrue(compute_category_index([]) == {})
         self.assertTrue(compute_category_index(['a']) == {'a': 1})
         self.assertTrue(compute_category_index(['b', 'a', 'b']) == {'a': 1, 'b': 2})
+
+    def test_weighted_interpolate(self):
+        s = pd.Series([0, np.nan, np.nan, 1, np.nan, np.nan, np.nan, 2])
+        w = pd.Series([0, 1, 0, 1, 1, 2, 0, 1])
+        r = pd.Series([0, .5, .5, 1, 1.25, 1.75, 1.75, 2])
+        pd.util.testing.assert_series_equal(weighted_interpolate(s, w), r)
