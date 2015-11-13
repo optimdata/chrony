@@ -8,7 +8,7 @@ import pandas as pd
 import pytz
 import unittest
 
-from .charting import compute_category_index
+from .core import compute_category_index
 from .exceptions import BadLengthsError, BegPosteriorToEndError, OverlapError, NotSortedError, HasTimezoneError, IntegrityError
 from .timespans import audit_timespan, describe_timespan, to_stamps, to_spans, compute_segments
 
