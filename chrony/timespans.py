@@ -17,7 +17,7 @@ def audit_timespan(begs, ends):
             raise BegPosteriorToEndError
     if (begs < begs.shift()).sum():
         raise NotSortedError
-    if (ends > begs.shift())[1:].sum():
+    if (ends.shift() > begs)[1:].sum():
         raise OverlapError
 
 
