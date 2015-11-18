@@ -8,6 +8,8 @@ from .exceptions import BadLengthsError, BegPosteriorToEndError, OverlapError, N
 
 
 def audit_timespan(begs, ends):
+    if begs.empty and ends.empty:
+        return
     if begs.dt.tz or ends.dt.tz:
         raise HasTimezoneError
     if len(begs) != len(ends):
@@ -22,6 +24,9 @@ def audit_timespan(begs, ends):
 
 
 def describe_timespan(begs, ends):
+    if begs.empty and ends.empty:
+        print('Empty series')
+        return
     contiguous_transitions = (begs == ends.shift()).sum()
     coverage = (ends - begs).sum().total_seconds() / (ends[len(ends) - 1] - begs[0]).total_seconds()
     metrics = (
@@ -34,6 +39,23 @@ def describe_timespan(begs, ends):
     )
     retval = pd.Series([m[1] for m in metrics], index=[m[0] for m in metrics])
     return retval
+
+
+def clean_overlap_timespan(begs, ends):
+    return pd.DataFrame({'ts_end': ends, 'ts_end_shifted': begs.shift(-1)}).min(axis=1)
+
+
+def fill_na_series(series):
+    if series.dtype.char == 'O':
+        series.fillna('UNDEFINED', inplace=True)
+    else:
+        series.fillna(-1, inplace=True)
+
+
+def fill_na_dataframe(df):
+    for column in df.columns:
+        if column.startswith('beg_') or column.startswith('end_'):
+            fill_na_series(df[column])
 
 
 def to_stamps(df, state_columns, value_columns, beg_col='ts_beg', end_col='ts_end'):
