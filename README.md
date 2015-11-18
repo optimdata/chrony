@@ -82,3 +82,8 @@ Check out tests for examples.
 A **timespan** is a row of a `pandas.DataFrame` which represents a period of time between two fixed points. These are represented using a beg and a end column.
 
 
+### Development
+
+#### Tests
+
+    nosetests chrony --with-coverage --cover-package chrony
