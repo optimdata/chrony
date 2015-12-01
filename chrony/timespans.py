@@ -22,6 +22,25 @@ def audit_timespan(begs, ends):
             raise OverlapError('At row %s end %s is posterior to %s' % (i, ends[i], begs[i + 1]))
 
 
+def audit_timespan_print(begs, ends):
+    if begs.dt.tz or ends.dt.tz:
+        print('')
+        print('TimeZoneError')
+    if len(begs) != len(ends):
+        print('')
+        print('TimeZoneError')
+    print('')
+    for beg, end in zip(begs, ends):
+        if beg > end:
+            print('beg=', beg, ' posterior to end=', end)
+    print('')
+    for i in range(len(begs) - 1):
+        if begs[i + 1] < begs[i]:
+            print('Events are not sorted')
+        if ends[i] > begs[i + 1]:
+            print('At row %s end %s is posterior to %s by %s' % (i, ends[i], begs[i + 1], ends[i] - begs[i + 1]))
+
+
 def describe_timespan(begs, ends):
     contiguous_transitions = (begs == ends.shift()).sum()
     coverage = (ends - begs).sum().total_seconds() / (ends[len(ends) - 1] - begs[0]).total_seconds()
@@ -144,3 +163,41 @@ def compute_segments(df, columns):
     for column in columns:
         mask = mask | (df[column] != df[column].shift(1))
     return mask.astype(int).cumsum()
+
+
+def merge_overlapping_events(df, beg, end, kind=None):
+    '''
+    Args:
+    - df (pandas dataframe): contains events.
+    - beg (str): name of the column containing beginning timestamps.
+    - end (str): name of the column containing ending timestamps.
+    - kind (str): name of the column describing the kind of events (useful if two kind of events coexist and you do not want to merge events
+    of different kinds).
+    Output:
+    - ddf (pandas dataframe). Dataframe df where overlapping events have been merged
+    '''
+    if kind is None:
+        ddf = df.sort_values(by=beg)
+        begs = ddf[beg]
+        ends = ddf[end] 
+        for i in range(len(begs)-1):
+            j=i+1
+            while ends[i]>begs[j]: # one enters the loop iff there is an overlap
+                begs[j]=begs[i] # event j actually starts at begs[i]
+                ends[i]=max(ends[i],ends[j]) # event i actually ends at least at ends[j]
+                if j<len(begs)-1:
+                     j+=1
+                else:
+                    break
+        # At this point, event i :
+        #   - starts at the initial begs[i] which was the correct one
+        #   thanks to the initial sort_values 
+        #   - ends at ends[j] with j the latest overlapping event after i
+        # 
+        # We drop all events from i+1 to j
+        ddf = ddf.drop_duplicates(beg, keep='first').reset_index(drop=True)
+    else:
+        raise ValueError('Case kind is not None not coded yet')
+    return ddf
+
+
