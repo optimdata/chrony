@@ -4,10 +4,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import matplotlib.pyplot as plt
 import numpy as np
-
-
-def compute_category_index(categories):
-    return {category: index + 1 for index, category in enumerate(sorted(set(categories)))}
+from .core import compute_category_index
 
 
 def plot_events(categories, xmin, xmax, labels=None, xlim=None, linewidth=10):

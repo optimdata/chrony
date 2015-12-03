@@ -1,5 +1,8 @@
 # chrony
 
+[![Build Status](https://travis-ci.org/optimdata/chrony.svg?branch=master)](https://travis-ci.org/optimdata/chrony)
+[![Coverage Status](https://coveralls.io/repos/optimdata/chrony/badge.svg?branch=master&service=github)](https://coveralls.io/github/optimdata/chrony?branch=master)
+
 Timeseries analysis tools with specific focus on timespans. Built on top of pandas.
 
 ## tldr
@@ -82,3 +85,8 @@ Check out tests for examples.
 A **timespan** is a row of a `pandas.DataFrame` which represents a period of time between two fixed points. These are represented using a beg and a end column.
 
 
+### Development
+
+#### Tests
+
+    nosetests chrony --with-coverage --cover-package chrony

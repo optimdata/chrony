@@ -1,0 +1,15 @@
+language: python
+
+python:
+  - 3.4
+
+env:
+
+install:
+  - pip install -r requirements.txt
+  - pip install coveralls
+
+script:
+  - nosetests --with-cover --cover-package chrony chrony
+
+after_success: coveralls

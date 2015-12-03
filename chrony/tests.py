@@ -8,9 +8,9 @@ import pandas as pd
 import pytz
 import unittest
 
-from .charting import compute_category_index
+from .core import compute_category_index, weighted_interpolate
 from .exceptions import BadLengthsError, BegPosteriorToEndError, OverlapError, NotSortedError, HasTimezoneError, IntegrityError
-from .timespans import audit_timespan, describe_timespan, to_stamps, to_spans, compute_segments
+from .timespans import audit_timespan, describe_timespan, to_stamps, to_spans, compute_segments, clean_overlap_timespan, fill_na_dataframe
 
 pd.set_option('display.width', 1000)
 
@@ -45,6 +45,12 @@ class TimespanCase(unittest.TestCase):
         begs = pd.date_range('1970-1-1', freq='d', periods=2).to_series().reset_index(drop=True)
         ends = pd.date_range('1970-1-2', freq='d', periods=2).to_series().reset_index(drop=True)
         describe_timespan(begs, ends)
+        describe_timespan(pd.Series(), pd.Series())
+        self.assertIsNone(audit_timespan(pd.Series(), pd.Series()))
+        begs = pd.date_range('1970-1-1', freq='d', periods=2).to_series().reset_index(drop=True)
+        ends = pd.date_range('1970-1-3', freq='d', periods=2).to_series().reset_index(drop=True)
+        ret = pd.to_datetime(['1970-1-2', '1970-1-4']).to_series().reset_index(drop=True)
+        pd.util.testing.assert_series_equal(ret, clean_overlap_timespan(begs, ends))
         # self.assertTrue(pd.Series().equals(describe_timespan(begs, ends)))
 
     def test_merge(self):
@@ -75,6 +81,15 @@ class TimespanCase(unittest.TestCase):
             'value_d': [10., 20., 30.],
             'value_s': ['10', '20', '30']
         }, columns=stamp_columns)
+        df2b = pd.DataFrame({
+            'ts': pd.to_datetime(['2015-1-1', '2015-1-2', '2015-1-3']),
+            'beg_state_d': [1., 2., -1.],
+            'end_state_d': [-1., 1., 2.],
+            'beg_state_s': ['1', '2', 'UNDEFINED'],
+            'end_state_s': ['UNDEFINED', '1', '2'],
+            'value_d': [10., 20., 30.],
+            'value_s': ['10', '20', '30']
+        }, columns=stamp_columns)
         df3 = pd.DataFrame(
             to_stamps(
                 df1,
@@ -84,6 +99,8 @@ class TimespanCase(unittest.TestCase):
             columns=stamp_columns
         )
         pd.util.testing.assert_frame_equal(df3, df2)
+        fill_na_dataframe(df3)
+        pd.util.testing.assert_frame_equal(df3, df2b)
         df4 = pd.DataFrame(
             to_spans(
                 df3,
@@ -120,8 +137,14 @@ class TimespanCase(unittest.TestCase):
         )
 
 
-class ChartingCase(unittest.TestCase):
+class CoreCase(unittest.TestCase):
     def test_all(self):
         self.assertTrue(compute_category_index([]) == {})
         self.assertTrue(compute_category_index(['a']) == {'a': 1})
         self.assertTrue(compute_category_index(['b', 'a', 'b']) == {'a': 1, 'b': 2})
+
+    def test_weighted_interpolate(self):
+        s = pd.Series([0, np.nan, np.nan, 1, np.nan, np.nan, np.nan, 2])
+        w = pd.Series([0, 1, 0, 1, 1, 2, 0, 1])
+        r = pd.Series([0, .5, .5, 1, 1.25, 1.75, 1.75, 2])
+        pd.util.testing.assert_series_equal(weighted_interpolate(s, w), r)

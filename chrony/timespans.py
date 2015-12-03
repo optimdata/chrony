@@ -8,6 +8,8 @@ from .exceptions import BadLengthsError, BegPosteriorToEndError, OverlapError, N
 
 
 def audit_timespan(begs, ends):
+    if begs.empty and ends.empty:
+        return
     if begs.dt.tz or ends.dt.tz:
         raise HasTimezoneError
     if len(begs) != len(ends):
@@ -15,11 +17,10 @@ def audit_timespan(begs, ends):
     for beg, end in zip(begs, ends):
         if beg > end:
             raise BegPosteriorToEndError
-    for i in range(len(begs) - 1):
-        if begs[i + 1] < begs[i]:
-            raise NotSortedError
-        if ends[i] > begs[i + 1]:
-            raise OverlapError('At row %s end %s is posterior to %s' % (i, ends[i], begs[i + 1]))
+    if (begs < begs.shift()).sum():
+        raise NotSortedError
+    if (ends.shift() > begs)[1:].sum():
+        raise OverlapError
 
 
 def audit_timespan_print(begs, ends):
@@ -42,6 +43,9 @@ def audit_timespan_print(begs, ends):
 
 
 def describe_timespan(begs, ends):
+    if begs.empty and ends.empty:
+        print('Empty series')
+        return
     contiguous_transitions = (begs == ends.shift()).sum()
     coverage = (ends - begs).sum().total_seconds() / (ends[len(ends) - 1] - begs[0]).total_seconds()
     metrics = (
@@ -54,6 +58,23 @@ def describe_timespan(begs, ends):
     )
     retval = pd.Series([m[1] for m in metrics], index=[m[0] for m in metrics])
     return retval
+
+
+def clean_overlap_timespan(begs, ends):
+    return pd.DataFrame({'ts_end': ends, 'ts_end_shifted': begs.shift(-1)}).min(axis=1)
+
+
+def fill_na_series(series):
+    if series.dtype.char == 'O':
+        series.fillna('UNDEFINED', inplace=True)
+    else:
+        series.fillna(-1, inplace=True)
+
+
+def fill_na_dataframe(df):
+    for column in df.columns:
+        if column.startswith('beg_') or column.startswith('end_'):
+            fill_na_series(df[column])
 
 
 def to_stamps(df, state_columns, value_columns, beg_col='ts_beg', end_col='ts_end'):
@@ -140,20 +161,21 @@ def to_spans(df, state_columns, value_columns, beg_col='ts_beg', end_col='ts_end
     return pd.DataFrame(dict(list(df_beg.to_dict('series').items()) + list(df_end.to_dict('series').items())))
 
 
-def merge_spans(spans, stamps, columns_states):
-    for key in ('beg', 'end'):
-        spans['ts'] = spans['ts_%s' % key]
-        spans = pd.merge(stamps, spans, how='outer', on='ts')
-        spans.set_index('ts', inplace=True)
-        spans.sort_index(inplace=True)
-        for column in columns_states:
-            spans['%s_%s' % (column, key)] = spans.pop(column).interpolate(method='time')
-            spans['%s_%s' % (column, key)].fillna(method='ffill', inplace=True)
-            spans['%s_%s' % (column, key)].fillna(method='bfill', inplace=True)
-        spans.reset_index(inplace=True)
-        spans.pop('ts')
-        spans = spans[~pd.isnull(spans['ts_%s' % key])]
-    return spans
+# def merge_spans(left, right):
+    
+    # for key in ('beg', 'end'):
+    #     spans['ts'] = spans['ts_%s' % key]
+    #     spans = pd.merge(stamps, spans, how='outer', on='ts')
+    #     spans.set_index('ts', inplace=True)
+    #     spans.sort_index(inplace=True)
+    #     for column in columns_states:
+    #         spans['%s_%s' % (column, key)] = spans.pop(column).interpolate(method='time')
+    #         spans['%s_%s' % (column, key)].fillna(method='ffill', inplace=True)
+    #         spans['%s_%s' % (column, key)].fillna(method='bfill', inplace=True)
+    #     spans.reset_index(inplace=True)
+    #     spans.pop('ts')
+    #     spans = spans[~pd.isnull(spans['ts_%s' % key])]
+    # return spans
 
 
 def compute_segments(df, columns):
