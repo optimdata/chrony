@@ -98,8 +98,6 @@ class TimespanCase(unittest.TestCase):
             ),
             columns=stamp_columns
         )
-        pd.util.testing.assert_frame_equal(df3, df2)
-        fill_na_dataframe(df3)
         pd.util.testing.assert_frame_equal(df3, df2b)
         df4 = pd.DataFrame(
             to_spans(

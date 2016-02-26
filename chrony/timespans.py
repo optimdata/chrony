@@ -119,6 +119,7 @@ def to_stamps(df, state_columns, value_columns, beg_col='ts_beg', end_col='ts_en
     retval.sort_values('ts', inplace=True)
     if retval['ts'].duplicated().sum():
         raise IntegrityError
+    fill_na_dataframe(retval)
     return retval
 
 
