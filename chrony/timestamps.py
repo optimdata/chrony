@@ -3,60 +3,108 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import pandas as pd
+import numpy as np
 
-from .exceptions import BadLengthsError, BegPosteriorToEndError, OverlapError, NotSortedError, IntegrityError, HasTimezoneError
+from .exceptions import BadLengthsError, MissingDataError, NotSortedError, IntegrityError, HasTimezoneError
 
 
-def audit_timespan(begs, ends):
-    if begs.empty and ends.empty:
+
+
+def audit_timestamp(ts, val, talk_to_me=False):
+    if ts.empty and val.empty:
         return
-    if begs.dt.tz or ends.dt.tz:
-        raise HasTimezoneError
-    if len(begs) != len(ends):
+    if ts.dt.tz: 
+        if talk_to_me:
+            print('HasTimezoneError')
+        else:
+            raise HasTimezoneError
+    if len(ts) != len(val):
+        if talk_to_me:
+            print('BadLengthsError')
+        else:
+            raise BadLengthsError
+    if len((ts-ts.shift())[1:].drop_duplicates())>1:
+        print('Bonjour')
+    if (ts < ts.shift()).sum():
+        if talk_to_me:
+            print('NotSortedError')
+        else:
+            raise NotSortedError
+    if val.count()!=len(val):
+        if talk_to_me:
+            print('MissingDataError')
+        else:
+            raise MissingDataError
+
+
+def find_holes(ts, val):
+    """
+    ts (pandas Series): timestamp indexing the time series
+    val (pandas Series): values of the time series
+    """
+    if len(ts)!=len(val):
         raise BadLengthsError
-    for beg, end in zip(begs, ends):
-        if beg > end:
-            raise BegPosteriorToEndError
-    if (begs < begs.shift()).sum():
-        raise NotSortedError
-    if (ends.shift() > begs)[1:].sum():
-        raise OverlapError
+    t,v = ts.values, val.values
+    n = len(t)
+    holes = []
+    i=0
+    while i<n:
+        l=0
+        vv = v[i]
+        while np.isnan(vv):
+            l+=1
+            vv = v[i+l]
+        if l>0: # there is a hole
+            holes.append({'ts_beg':t[i],'ts_end':t[i+l-1],'length':l})
+            i+=l
+        else:
+            i+=1
+    return holes
 
 
-def audit_timespan_print(begs, ends):
-    if begs.dt.tz or ends.dt.tz:
-        print('')
-        print('TimeZoneError')
-    if len(begs) != len(ends):
-        print('')
-        print('TimeZoneError')
-    for beg, end in zip(begs, ends):
-        if beg > end:
-            print('')
-            print('beg=', beg, ' posterior to end=', end)
-    for i in range(len(begs) - 1):
-        if begs[i + 1] < begs[i]:
-            print('Events are not sorted')
-        if ends[i] > begs[i + 1]:
-            print('At row %s end %s is posterior to %s by %s' % (i, ends[i], begs[i + 1], ends[i] - begs[i + 1]))
+def cut_ts(ts, val, min_hole_duration):
+    """
+    Cuts the time series (ts,val) in h+1 time series where h is the
+    number of holes in (ts,val) with duration > min_hole_duration.
+    """
+    holes = find_holes(ts,val)
+    t = ts.values
+    v = val.values
+    n = len(holes)
+    time_series = []
+    it1 = 0
+    i = 0
+    while i<n:
+        ts_beg, ts_end, l = holes[i]['ts_beg'], holes[i]['ts_end'], holes[i]['length']
+        if l>min_hole_duration:
+            it2 = np.where(t==ts_beg)[0][0] - 1
+            time_series.append(pd.DataFrame({'ts':t[it1:it2],'val':v[it1:it2]}))
+            it1 = np.where(t==ts_end)[0][0] + 1
+        i+=1
+    return time_series
 
 
-def describe_timespan(begs, ends):
-    if begs.empty and ends.empty:
+def describe_timestamp(ts, val):
+    if ts.empty and val.empty:
         print('Empty series')
         return
-    contiguous_transitions = (begs == ends.shift()).sum()
-    coverage = (ends - begs).sum().total_seconds() / (ends[len(ends) - 1] - begs[0]).total_seconds()
+    holes = pd.DataFrame(find_holes(ts, val))
     metrics = (
-        ('beg', begs[0]),
-        ('count', len(begs)),
-        ('contiguous transitions', contiguous_transitions),
-        ('not contiguous transitions', len(begs) - contiguous_transitions - 1),
-        ('coverage', coverage),
-        ('end', ends[len(ends) - 1])
+        ('beg',ts[0]),
+        ('time step',ts[1]-ts[0]),
+        ('end', ts[len(ts)-1]),
+        ('# ts',len(ts)),
+        ('missing values',len(ts)-val.count()),
+        ('# holes',len(holes)),
+        ('min hole size', holes.length.min()),
+        ('25% percentile hole size', np.percentile(holes.length.values,25)),
+        ('median hole size', np.percentile(holes.length.values,25)),
+        ('75% percentile hole size', np.percentile(holes.length.values,25)),
+        ('max hole size', holes.length.max())
     )
     retval = pd.Series([m[1] for m in metrics], index=[m[0] for m in metrics])
-    return retval
+    print(retval)
+    return    
 
 
 def clean_overlap_timespan(begs, ends):
@@ -118,7 +166,6 @@ def to_stamps(df, state_columns, value_columns, beg_col='ts_beg', end_col='ts_en
     retval.sort_values('ts', inplace=True)
     if retval['ts'].duplicated().sum():
         raise IntegrityError
-    fill_na_dataframe(retval)
     return retval
 
 

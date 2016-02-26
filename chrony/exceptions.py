@@ -5,10 +5,6 @@ class BadLengthsError(ValueError):
     pass
 
 
-class BegPosteriorToEndError(ValueError):
-    pass
-
-
 class OverlapError(ValueError):
     pass
 

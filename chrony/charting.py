@@ -18,6 +18,7 @@ def plot_events(categories, xmin, xmax, labels=None, xlim=None, linewidth=10):
     plt.ylim(0, len(index) + 1)
     plt.xticks(fontsize=18)
     plt.yticks(list(index.values()), list(index.keys()), fontsize=18)
+    plt.gcf().autofmt_xdate()
     for i in range(len(categories)):
         if labels is not None:
             plt.text(

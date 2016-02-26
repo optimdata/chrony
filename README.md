@@ -80,6 +80,24 @@ The library gives you a `audit_timespan` function which raises an error if:
 
 Check out tests for examples.
 
+The `audit_timespan_print` function makes the exact same verifications as `audit_timespan`, except it does not raise an error but prints the list of problems it detected.
+
+Example:
+
+	>>> import chrony.chrony.timespans as chrony
+	>>> chrony.audit_timespan_print(events.beg,events.end)
+	
+	At row 99334 end 2015-01-22 14:27:24 is posterior to 2015-01-22 14:17:43 by 0 days 00:09:41
+	
+	>>> events.iloc[[99334,99335]]
+		                      beg                 end  produced_count  state_id  \
+		99334 2015-01-22 14:17:43 2015-01-22 14:27:24              12       208   
+		99335 2015-01-22 14:17:43 2015-01-22 14:17:43              12       216   
+	
+	      state_name  
+	99334    Stopped  
+	99335      Ready
+
 ## Terminology
 
 A **timespan** is a row of a `pandas.DataFrame` which represents a period of time between two fixed points. These are represented using a beg and a end column.
