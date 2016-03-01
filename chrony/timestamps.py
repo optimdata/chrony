@@ -5,12 +5,9 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import pandas as pd
 import numpy as np
 
-from .exceptions import BadLengthsError, MissingDataError, NotSortedError, IntegrityError, HasTimezoneError
+from .exceptions import BadLengthsError, MissingDataError, NotSortedError, IntegrityError, HasTimezoneError, TimeStepError
 
-
-
-
-def audit_timestamp(ts, val, talk_to_me=False):
+def audit(ts, val, talk_to_me=False):
     if ts.empty and val.empty:
         return
     if ts.dt.tz: 
@@ -24,45 +21,93 @@ def audit_timestamp(ts, val, talk_to_me=False):
         else:
             raise BadLengthsError
     if len((ts-ts.shift())[1:].drop_duplicates())>1:
-        print('Bonjour')
+        if talk_to_me:
+            print('TimeStepError')
+        else:
+            raise TimeStepError
     if (ts < ts.shift()).sum():
         if talk_to_me:
             print('NotSortedError')
         else:
             raise NotSortedError
-    if val.count()!=len(val):
+    if val.count()==0:
         if talk_to_me:
             print('MissingDataError')
         else:
             raise MissingDataError
 
 
-def find_holes(ts, val):
+def find_holes(ts, data):
     """
     ts (pandas Series): timestamp indexing the time series
-    val (pandas Series): values of the time series
+    data (pandas Series): values of the time series
     """
-    if len(ts)!=len(val):
+    audit(ts,data)
+    if len(ts)!=len(data):
         raise BadLengthsError
-    t,v = ts.values, val.values
+    if data.count()==0:
+        raise ValueError('TimeSeries with only missing data')
+    t,d = ts.values, data.values
     n = len(t)
     holes = []
     i=0
     while i<n:
         l=0
-        vv = v[i]
-        while np.isnan(vv):
+        dd = d[i]
+        while np.isnan(dd) and i+l<n-1:
             l+=1
-            vv = v[i+l]
+            dd = d[i+l]
         if l>0: # there is a hole
-            holes.append({'ts_beg':t[i],'ts_end':t[i+l-1],'length':l})
+            holes.append({'ts_beg':t[i],'ts_end':t[i+l-1],'length':l,'i_beg':i,'i_end':i+l-1})
             i+=l
         else:
             i+=1
-    return holes
+    return pd.DataFrame(holes)
+
+def trim(ts, val):
+    """
+
+    Returns a time series (ts, val) where the missing 
+    data at the beginning and end of the series have been 
+    trimmed out.
+    """
+    i=0
+    while np.isnan(val[i]):
+        i+=1
+    j=len(val)-1
+    while np.isnan(val[j]):
+        j-=1
+    return pd.DataFrame({'ts':ts[i:j+1],'data':val[i:j+1]})
 
 
-def cut_ts(ts, val, min_hole_duration):
+def cut(ts, data, min_hole_duration):
+    """
+    Cuts the time series (ts, data) in h+1 time series where h is the
+    number of holes in (ts,data) with duration > min_hole_duration.
+    """
+    df = trim(ts,data)
+    holes = find_holes(df.ts, df.data)
+    holes = holes[holes.length>min_hole_duration]
+    beg, end = holes.i_beg, holes.i_end
+    t, d, n = df.ts.values, df.data.values, len(holes)
+    # add first cut
+    i_beg = 0
+    i_end = beg[0]
+    time_series = [pd.DataFrame({'ts':t[i_beg:i_end],'data':d[i_beg:i_end]})] 
+    # add all intermediate cuts
+    for j in range(n-1):
+        i_beg = end[j]+1
+        i_end = beg[j+1] 
+        time_series.append(pd.DataFrame({'ts':t[i_beg:i_end],'data':d[i_beg:i_end]})) 
+    # add last cut (if different from first)
+    if n>0:
+        i_beg=end[n-1]+1
+        i_end=len(d)
+        time_series.append(pd.DataFrame({'ts':t[i_beg:i_end],'data':d[i_beg:i_end]})) 
+    return time_series
+
+
+def cut_ts_old(ts, val, min_hole_duration):
     """
     Cuts the time series (ts,val) in h+1 time series where h is the
     number of holes in (ts,val) with duration > min_hole_duration.
@@ -84,7 +129,7 @@ def cut_ts(ts, val, min_hole_duration):
     return time_series
 
 
-def describe_timestamp(ts, val):
+def describe(ts, val):
     if ts.empty and val.empty:
         print('Empty series')
         return
@@ -95,238 +140,62 @@ def describe_timestamp(ts, val):
         ('end', ts[len(ts)-1]),
         ('# ts',len(ts)),
         ('missing values',len(ts)-val.count()),
-        ('# holes',len(holes)),
-        ('min hole size', holes.length.min()),
-        ('25% percentile hole size', np.percentile(holes.length.values,25)),
-        ('median hole size', np.percentile(holes.length.values,25)),
-        ('75% percentile hole size', np.percentile(holes.length.values,25)),
-        ('max hole size', holes.length.max())
+        ('# holes',len(holes))
     )
+    if len(holes)>0:
+        metrics+=(
+        ('min hole size', holes.length.min()),
+        ('1% percentile hole size', np.percentile(holes.length.values,1)),
+        ('10% percentile hole size', np.percentile(holes.length.values,10)),
+        ('25% percentile hole size', np.percentile(holes.length.values,25)),
+        ('median hole size', np.percentile(holes.length.values,50)),
+        ('75% percentile hole size', np.percentile(holes.length.values,75)),
+        ('90% percentile hole size', np.percentile(holes.length.values,90)),
+        ('99% percentile hole size', np.percentile(holes.length.values,99)),
+        ('max hole size', holes.length.max())
+        )
     retval = pd.Series([m[1] for m in metrics], index=[m[0] for m in metrics])
     print(retval)
     return    
 
-
-def clean_overlap_timespan(begs, ends):
-    return pd.DataFrame({'ts_end': ends, 'ts_end_shifted': begs.shift(-1)}).min(axis=1)
-
-
-def fill_na_series(series):
-    if series.dtype.char == 'O':
-        series.fillna('UNDEFINED', inplace=True)
-    else:
-        series.fillna(-1, inplace=True)
-
-
-def fill_na_dataframe(df):
-    for column in df.columns:
-        if column.startswith('beg_') or column.startswith('end_'):
-            fill_na_series(df[column])
-
-
-def to_stamps(df, state_columns, value_columns, beg_col='ts_beg', end_col='ts_end'):
-    '''
-        Convert an frame representing periods (eg each row has a beg and end) to a frame representing change of periods.
-        Example:
-
-        This dataframe:
-
-           dummy     ts_beg     ts_end  value
-        0      3 2015-01-01 2015-01-02      1
-        1      4 2015-01-02 2015-01-03      2
-
-        is converted to
-
-                  ts  beg_value  end_value
-        0 2015-01-01          1        NaN
-        1 2015-01-02          2          1
-        2 2015-01-03        NaN          2
-    '''
-    beg_columns = dict(
-        [(beg_col, 'ts')] +
-        [(col, 'beg_%s' % col) for col in state_columns] +
-        [('beg_%s' % col, col) for col in value_columns]
-    )
-    end_columns = dict(
-        [(end_col, 'ts')] +
-        [(col, 'end_%s' % col) for col in state_columns] +
-        [('end_%s' % col, col) for col in value_columns]
-    )
-    df1 = pd.DataFrame(df, columns=list(beg_columns.keys()))
-    df1.rename(columns=beg_columns, inplace=True)
-    df2 = pd.DataFrame(df, columns=list(end_columns.keys()))
-    df2.rename(columns=end_columns, inplace=True)
-    # return df1, df2
-    retval = pd.merge(
-        df1,
-        df2,
-        on=['ts'] + value_columns,
-        how='outer'
-    )
-    retval.sort_values('ts', inplace=True)
-    if retval['ts'].duplicated().sum():
-        raise IntegrityError
-    return retval
-
-
-def to_spans(df, state_columns, value_columns, beg_col='ts_beg', end_col='ts_end'):
-    '''
-        Revert method of to_stamps
-        Example:
-
-        This dataframe:
-
-                  ts  beg_value  end_value
-        0 2015-01-01          1        NaN
-        1 2015-01-02          2          1
-        2 2015-01-03        NaN          2
-
-        is converted to
-
-               ts_beg     ts_end  value
-        0  2015-01-01 2015-01-02      1
-        1  2015-01-02 2015-01-03      2
-    '''
-    beg_columns = dict(
-        [('ts', beg_col)] +
-        [('beg_%s' % col, col) for col in state_columns] +
-        [(col, 'beg_%s' % col) for col in value_columns]
-    )
-    end_columns = dict(
-        [('ts', end_col)] +
-        [('end_%s' % col, col) for col in state_columns] +
-        [(col, 'end_%s' % col) for col in value_columns]
-    )
-    df_beg = pd.DataFrame(df.iloc[:-1], columns=beg_columns.keys())
-    df_beg.rename(columns=beg_columns, inplace=True)
-    df_beg.reset_index(drop=True, inplace=True)
-    df_end = pd.DataFrame(df.iloc[1:], columns=end_columns.keys())
-    df_end.rename(columns=end_columns, inplace=True)
-    df_end.reset_index(drop=True, inplace=True)
-    # print(df_beg)
-    # print(df_end)
-    return pd.DataFrame(dict(list(df_beg.to_dict('series').items()) + list(df_end.to_dict('series').items())))
-
-
-# def merge_spans(left, right):
+def fill_ts(df, time_step):
+    """
+    Fills the holes where there is no value of ts in the time series (ts, val)
+    by adding a line (ts, np.nan) wherever needs be given the theoretical
+    time step time_step. 
+    df : pandas Series containing one column 'ts'
+    time_step : pandas DataFrame
+    """
+    ts = pd.date_range(start=df.ts.values[0],end=df.ts.values[-1],freq=time_step)
+    return df.merge(pd.DataFrame({'ts':ts}),on='ts',how='outer').sort_values(by='ts')
     
-    # for key in ('beg', 'end'):
-    #     spans['ts'] = spans['ts_%s' % key]
-    #     spans = pd.merge(stamps, spans, how='outer', on='ts')
-    #     spans.set_index('ts', inplace=True)
-    #     spans.sort_index(inplace=True)
-    #     for column in columns_states:
-    #         spans['%s_%s' % (column, key)] = spans.pop(column).interpolate(method='time')
-    #         spans['%s_%s' % (column, key)].fillna(method='ffill', inplace=True)
-    #         spans['%s_%s' % (column, key)].fillna(method='bfill', inplace=True)
-    #     spans.reset_index(inplace=True)
-    #     spans.pop('ts')
-    #     spans = spans[~pd.isnull(spans['ts_%s' % key])]
-    # return spans
 
-
-def compute_segments(df, columns):
-    '''
-    '''
-    mask = pd.Series([False] * len(df))
-    for column in columns:
-        mask = mask | (df[column] != df[column].shift(1))
-    return mask.astype(int).cumsum()
-
-
-def merge_overlapping_events(df, beg, end, kind=None):
-    '''
-    Args:
-    - df (pandas dataframe): contains events.
-    - beg (str): name of the column containing beginning timestamps.
-    - end (str): name of the column containing ending timestamps.
-    - kind (str): name of the column describing the kind of events (useful if two kind of events coexist and you do not want to merge events
-    of different kinds).
-    Output:
-    - ddf (pandas dataframe). Dataframe df where overlapping events have been merged
-    '''
-    if kind is None:
-        ddf = df.sort_values(by=beg).reset_index(drop=True)
-        begs = ddf[beg].copy()
-        ends = ddf[end].copy()
-        i=0
-        while i <= len(begs)-2:
-            j=i+1
-            while ends[i]>begs[j]: # one enters the loop iff there is an overlap
-                begs[j]=begs[i] # event j actually starts at begs[i]
-                ends[i]=max(ends[i],ends[j]) # event i actually ends at least at ends[j]
-                if j<len(begs)-1:
-                     j+=1
+def fill_data(ts, val, max_hole_duration, method='interpolate'):
+    """
+    Fill the holes of (ts, val) that have a duration <= max_hole_duration
+    using linear interpolation.
+    """
+    holes = find_holes(ts,val)
+    if len(holes)==0:
+        return pd.DataFrame({'ts':ts,'val':val})
+    else:
+        newval = val.values
+        for ind, h in holes.iterrows():
+            length, ts_beg, ts_end = h['length'],h['ts_beg'],h['ts_end']
+            if length<=max_hole_duration:
+                i_beg = ts[ts==ts_beg].index[0]-1
+                i_end = ts[ts==ts_end].index[0]+1
+                if i_beg==-1 and i_end==len(val):
+                    raise ValueError('Empty Time Series!')
+                elif i_beg==-1:
+                    for i in range(0,i_end):
+                        newval[i] = val[i_end]
+                elif i_end==len(val):
+                    for i in range(i_beg+1,i_end):
+                        newval[i] = val[i_beg]
                 else:
-                    break
-            i=j
-        # At this point, event i :
-        #   - starts at the initial begs[i] which was the correct one
-        #   thanks to the initial sort_values 
-        #   - ends at ends[j] with j the latest overlapping event after i
-        # 
-        # We drop all events from i+1 to j
-        for l in [beg,end]:
-            ddf.pop(l)
-        ddf[beg]=begs
-        ddf[end]=ends
-        ddf = ddf.drop_duplicates(beg, keep='first').reset_index(drop=True)
-    else:
-        raise ValueError('Case kind is not None not coded yet')
-    return ddf
-
-
-def merge_overlapping_events_kind(df, beg, end, kind=None):
-    '''
-    Args:
-    - df (pandas dataframe): contains events.
-    - beg (str): name of the column containing beginning timestamps.
-    - end (str): name of the column containing ending timestamps.
-    - kind (list of str): name of the column describing the kind of events (useful if two kind of events coexist and you do not want to merge events of different kinds).
-    Output:
-    - ddf (pandas dataframe). Dataframe df where overlapping events have been merged
-    '''
-    new_df = pd.DataFrame({beg:[],end:[]})
-    for kind, ddf in df.groupby(kind):
-        dddf = merge_overlapping_events(ddf, beg, end)
-        new_df = new_df.append(dddf, verify_integrity=True, ignore_index=True) 
-    new_df = new_df.reset_index(drop=True)
-    return new_df
-
-
-def add_time_between_events(df, beg, end, kind=None):
-    '''
-    Args:
-    - df (pandas dataframe): contains events.
-    - beg (str) : name of the column containing beginning timestamps.
-    - end (str) : name of the column containing ending timestamps.
-    - kind (list of str): list of the columns defining a kind of event (if you want to study separately 
-    different kinds of events)
-    '''
-    new_df = pd.DataFrame({beg:[],end:[]})
-    for kind, ddf in df.groupby(kind):
-        dddf=ddf.sort_values(by=beg).reset_index(drop=True).copy()
-
-        begs = dddf[beg].values
-        ends = dddf[end].values
-        
-        if (len(begs)>1):
-            time_since_previous = [None]
-            for i in range(1,len(begs)):
-                time_since_previous.append(begs[i]-ends[i-1])
+                    for i in range(i_beg+1,i_end):
+                        newval[i] = val[i_beg] + (i-i_beg)/(i_end-i_beg)*(val[i_end] - val[i_beg])
+        return pd.DataFrame({'ts':ts,'data':newval})
     
-            time_to_next = []
-            for i in range(0,len(begs)-1):
-                time_to_next.append(begs[i+1]-ends[i])
-            time_to_next.append(None)
-
-            dddf['time_since_previous']=pd.Series(time_since_previous)
-            dddf['time_to_next']=pd.Series(time_to_next)
-        else:
-            dddf['time_since_previous']=pd.Series([None])
-            dddf['time_to_next']=pd.Series([None])
-        
-        new_df = new_df.append(dddf, verify_integrity=True, ignore_index=True)
-        dddf=None
-    return new_df
 
