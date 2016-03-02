@@ -37,7 +37,7 @@ In most cases, ts and data will be columns of one same dataframe df, as in the f
 
 
 Here is a plot of the timestamp-series (ts, data).		
-![](./images/plot_fake_timeseries.svg)
+![](./images/plot_fake_timeseries.png)
 
 ## audit (ts, data)
 
@@ -89,7 +89,7 @@ Here is a plot of the timestamp-series (ts, data).
 
 	>>> df = timestamps.fill_data(df.ts, df.data,max_hole_duration=2):
 	>>> print(df)
-                  ts       data
+                data         ts
 		0   0.022190 2015-09-01
 		1   0.727421 2015-09-02
 		2   1.229841 2015-09-03
@@ -99,7 +99,7 @@ Here is a plot of the timestamp-series (ts, data).
 		26 -0.929127 2015-09-27
 
 
-![](./images/plot_fake_timeseries_aftershave.svg)
+![](./images/plot_fake_timeseries_aftershave.png)
 
 Note that the initial timestamp-series has been trimmed (missing data at the end has been removed) and that all holes with length smaller or equal to two timesteps have been filled.
 
@@ -126,5 +126,5 @@ Note that the initial timestamp-series has been trimmed (missing data at the end
 	]
 	
 
-![](./images/plot_fake_timeseries_cut1.svg)
-![](./images/plot_fake_timeseries_cut2.svg)
+![](./images/plot_fake_timeseries_cut1.png)
+![](./images/plot_fake_timeseries_cut2.png)
