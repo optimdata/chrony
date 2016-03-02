@@ -37,7 +37,7 @@ In most cases, ts and data will be columns of one same dataframe df, as in the f
 
 
 Here is a plot of the timestamp-series (ts, data).		
-![](https://raw.githubusercontent.com/optimdata/chrony/master/images/plot_fake_timeseries.svg)
+![](./images/plot_fake_timeseries.svg?raw=true)
 
 ## audit (ts, data)
 
